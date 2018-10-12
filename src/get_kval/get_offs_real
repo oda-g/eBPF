@@ -1,0 +1,11 @@
+#!/bin/bash
+
+# warning: this value may be different if kernel version is defferent.
+OFFS_REAL_OFFSET=152
+
+set $(sudo grep tk_core /proc/kallsyms)
+TK_CORE_ADDR=0x${1}
+tmp=$((TK_CORE_ADDR + OFFS_REAL_OFFSET))
+OFFS_REAL_ADDR=$(printf "0x%lx" $tmp)
+
+sudo ./get_kval $OFFS_REAL_ADDR 2>/dev/null

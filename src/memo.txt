@@ -1,0 +1,602 @@
+eBPF概要
+--------
+
+1. はじめに
+
+1.1 eBPFとは
+
+eBPFは、独自の命令セット(byte code)を持ち、それを用いて作成したプログラムをカーネル内で
+実行することができる。カーネル内で、eBPF byte code を実行するためのVMが存在する(実際の
+ところは、jit compile されて、native code が実行される)。カーネル内で、eBPF プログラム
+を実行できるポイントは数多くある。eBPFは、主に network、trace、security の分野でよく用
+いられている。
+
+1.2 本資料の内容
+
+eBPFは、複雑なシステムであり、簡単には説明できないため、本資料では、主に eBPFを学ぶため
+のポインタを示すことを意図している。
+また、今回の測定で使用した、tc による eBPF の実行について、概略が分かるように説明する。
+
+2. 参考資料
+
+・eBPF概要
+  http://cilium.readthedocs.io/en/latest/bpf/#
+  恐らく、世の中で最も eBPF についてよく書かれているドキュメント。まずは、これから読み
+  始めるとよい。
+
+・トレースツール
+  https://github.com/iovisor/bcc
+  トレース用途で、eBPFを使う場合、お世話になるであろうツール群。この下にあるドキュメント
+  類も参考になる。
+
+・命令セット
+  https://github.com/iovisor/bpf-docs/blob/master/eBPF.md
+  https://www.kernel.org/doc/Documentation/networking/filter.txt
+
+・サポート機能
+  https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
+  eBPF関連の機能追加は、今もアクティブに行われている。どの機能がどのカーネルバージョンで
+  使えるかは、このドキュメントで分かる。
+
+・カーネルコード
+  kernel/bpf/ 配下: eBPF関連コード
+  samples/bpf/ 配下: eBPF使用例(サンプルプログラム)
+  tools/bpf/ 配下: bpftool プログラム
+  tools/lib/bpf/ 配下: libbpf ライブラリ
+
+  eBPFの仕様と使用法は、実際のところ、上記カーネルコードを見ないと分からない。
+  (bcc のソースコードも参考にはなる。)
+
+3. eBPFプリミティブ
+
+3.1 bpfシステムコール
+
+eBPF関連の操作に関する、カーネルとのインタフェースは、bpfシステムコール(のみ)である。
+シンタックスについては、bpf(2) man page を参照。詳細なインタフェースに関しては、下記
+ヘッダファイルを参照すること。
+- /usr/include/linux/bpf.h
+
+bpfシステムコールでは、2つのオブジェクト、プログラムとマップを取り扱う。プログラムの
+ロード、マップの作成や情報取得、ファイルシステムへの固定などの機能が用意されている。
+
+3.2 プログラム
+
+プログラムにはいくつかのタイプがある。カーネルのどこで実行したいかにより、タイプを
+選択する。タイプにより、プログラムに渡る引数が決まっており、タイプごとに異なる。
+また、タイプにより、プログラムの有効化の手段が異なる(ロードするだけでは、動作しない。
+ロード後、有効化する必要がある)。
+
+タイプの例を以下にいくつか示す。(/usr/include/linux/bpf.h に全て定義されている。15以上
+ある。)
+- BPF_PROG_TYPE_SOCKET_FILTER
+  raw socket のfilter(ex. tcpdumpで使用)
+- BPF_PROG_TYPE_KPROBE
+  kprobe で定義したポイントで eBPF実行
+- BPF_PROG_SCHED_CLS
+  qdisc で eBPF実行(tc で設定)
+- BPF_PROG_TYPE_XDP
+  XDP用(ip で設定)
+
+3.3 マップ
+
+eBPFプログラム間、eBPFプログラムと通常のプログラム間での情報のやり取りのために、マップ
+という単純な記憶の仕組み(key-value store)が用意されている。いくつかのタイプが用意されて
+いる。以下にいくつか示す。(/usr/include/linux/bpf.h に全て定義されている。16以上ある。)
+- BPF_MAP_TYPE_HASH
+  dictionary タイプ
+- BPF_MAP_TYPE_ARRAY
+  keyが0から始まる数字。配列。
+
+3.4 bpf ファイルシステム
+
+プログラムやマップは、基本的には、bpfシステムコールを実行したプロセスが終了すると消えて
+しまう。bpf ファイルシステムという特別なファイルシステムが用意されており、プログラムや
+マップを永続化(pin)するために使用できる。(永続化もbpfシステムコールで行う。)
+
+また、プログラム実行中にマップを他のプログラムから参照したい場合にも、pin すると便利で
+ある。(pinしなくてもアクセスはできる。)
+
+3.5 実行の流れ(プリミティブ)
+
+典型的には、以下のような流れの(C)プログラムを作成して実行する。
+
+1. マップの作成、または、pinされたマップの取得。(bpfシステムコール)
+   必要であれば、作成したマップの pin も行う。(bpfシステムコール)
+2. eBPF プログラムのロード (bpfシステムコール)
+3. eBPF プログラムの有効化 (プログラムタイプにより、様々。結構複雑)
+4. 待ちに入る。(exitすると、eBPFプログラムが消えるため。interrupt すると、終了) 
+
+byte code を手で作成できるのであれば、これでもよいが、現実的には、byte code で eBPFプロ
+グラムを書くのはつらいので、C言語で eBPFプログラムを書くことになる。その際の実行の流れ
+を次項に示す。
+
+3.6 実行の流れ(現実的)
+
+1. C言語で eBPFプログラムを作成する。
+2. 作成したプログラムを clang でコンパイルし、eBPF オブジェクトを生成。
+   作成される eBPFオブジェクトは、ELF形式のファイルである。
+3. ローダと呼ばれるプログラムで、eBPFオブジェクトをロードする。
+
+プログラムタイプにより、専用のローダが用意されている。
+- BPF_PROG_SCHED_CLS: tc コマンド
+- BPF_PROG_TYPE_KPROBE: bcc の中にローダが組み込まれている
+- BPF_PROG_TYPE_XDP: ip コマンド
+
+ローダにもよるが、典型的には、ELFファイルの中にマップ情報も含めるコンベンションになって
+おり、3.5 で示した 1.～3. の処理をローダ内で行っている。ELFファイルのセクションに eBPF
+のbyte code が格納されているので、それを取り出して、ロードしている。
+
+(なお、ローダを自作することも、可能である。ELF ファイルの操作ができれば、それほど難しく
+はない。)
+
+次章では、今回測定に用いた、tc の使用例について、実行の流れにそって、概略を説明する。
+
+4. tc による eBPF 実行
+
+4.1 eBPF プログラム
+
+今回使用したプログラムを例にいくつかのポイントを示す。
+
+mes_chk.c
+---------------------------------------------------------------------------------------
+#include <linux/bpf.h>
+#include <linux/pkt_cls.h>
+#include <linux/if_ether.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
+#include <stdint.h>
+#include "bpf_elf.h"
+#include "mes_chk.h"
+
+#ifndef __section
+#define __section(NAME) \
+__attribute__((section(NAME), used))
+#endif
+
+#ifndef __inline
+#define __inline \
+inline __attribute((always_inline))
+#endif
+
+#ifndef BPF_FUNC
+#define BPF_FUNC(NAME, ...) \
+(*NAME)(__VA_ARGS__) = (void *)BPF_FUNC_##NAME                             ※4
+#endif
+
+static void *BPF_FUNC(map_lookup_elem, void *, void *);                    ※4
+static int BPF_FUNC(map_update_elem, void *, void *, void *, int);         ※4
+static uint64_t BPF_FUNC(ktime_get_ns, void);                              ※4
+
+struct bpf_elf_map mes_map_start __section("maps") = {                     ※1
+	.type		= BPF_MAP_TYPE_ARRAY,
+	.size_key	= sizeof(uint32_t),
+	.size_value	= sizeof(uint64_t),
+	.pinning	= PIN_GLOBAL_NS,
+	.max_elem	= MES_DATA_SIZE,
+};
+
+struct bpf_elf_map mes_map_end __section("maps") = {
+	.type		= BPF_MAP_TYPE_ARRAY,
+	.size_key	= sizeof(uint32_t),
+	.size_value	= sizeof(uint64_t),
+	.pinning	= PIN_GLOBAL_NS,
+	.max_elem	= MES_DATA_SIZE,
+};
+
+struct bpf_elf_map mes_map_cnt __section("maps") = {
+	.type		= BPF_MAP_TYPE_ARRAY,
+	.size_key	= sizeof(uint32_t),
+	.size_value	= sizeof(uint32_t),
+	.pinning	= PIN_GLOBAL_NS,
+	.max_elem	= MES_CNT_SIZE,
+};
+
+static __inline int check_pkt(struct __sk_buff *skb)                         ※3
+{
+	void *data = (void *)(long)skb->data;
+	void *data_end = (void *)(long)skb->data_end;
+	struct ethhdr *eth = data;
+	struct iphdr *ip = data + sizeof(*eth);
+	struct udphdr *udp = (void *)ip + sizeof(*ip);
+
+	if (data + sizeof(*eth) + sizeof(*ip) + sizeof(*udp) > data_end) {
+		return 0;
+	}
+	if (eth->h_proto == 0x08 && ip->protocol == MES_PROTO &&
+	    udp->dest == MES_DEST_PORT) {
+		return 1;
+	}
+	return 0;
+}
+
+__section("ingress")                                                         ※2
+int mes_start(struct __sk_buff *skb)
+{
+	uint32_t idx, *cnt;
+	uint64_t t;
+
+	if (!check_pkt(skb)) {
+		return TC_ACT_OK;
+	}
+
+	idx = MES_CNT_IDX_START;
+	cnt = map_lookup_elem(&mes_map_cnt, &idx);                           ※4 ※5
+	if (!cnt) {
+		return TC_ACT_OK;
+	}
+	if (*cnt >= MES_DATA_SIZE) {
+		return TC_ACT_OK;
+	}
+
+	t = ktime_get_ns();                                                   ※4
+	idx = *cnt;
+	map_update_elem(&mes_map_start, &idx, &t, 0);                         ※4 ※5
+
+	*cnt += 1;
+
+	return TC_ACT_OK;
+}
+
+__section("egress")                                                           ※2
+int mes_end(struct __sk_buff *skb)
+{
+	uint32_t idx, *cnt;
+	uint64_t t;
+
+	if (!check_pkt(skb)) {
+		return TC_ACT_OK;
+	}
+
+	idx = MES_CNT_IDX_END;
+	cnt = map_lookup_elem(&mes_map_cnt, &idx);                            ※4 ※5
+	if (!cnt) {
+		return TC_ACT_OK;
+	}
+	if (*cnt >= MES_DATA_SIZE) {
+		return TC_ACT_OK;
+	}
+
+	t = ktime_get_ns();                                                   ※4
+	idx = *cnt;
+	map_update_elem(&mes_map_end, &idx, &t, 0);                           ※4 ※5
+
+	*cnt += 1;
+
+	return TC_ACT_OK;
+}
+
+char __license[] __section("license") = "GPL";
+----------------------------------------------------------------------------------------
+
+※1 使用するマップを"maps"セクションに定義している。ローダ(tc コマンド)は、maps セクション
+    を参照して、マップを用意する。
+    本プログラムでは、3つのマップを使用している。それぞれ、PIN_GLOBAL_NS を指定しており、
+    bpfファイルシステムにpinされる。
+
+※2 eBPF プログラム本体は、"ingress"セクションと"egress"セクションにある。本プログラムで
+    は、ひとつのCソース中に、2つの eBPF プログラムが定義されている。
+    セクション名は任意。tc コマンドで参照する。
+    tc コマンドで扱うプログラムタイプは、BPF_PROG_SCHED_CLS であり、eBPFプログラムに渡る
+    引数は、sk_buf 構造体ポインタ(ひとつ)である。
+
+※3 mes_startとmes_endで共通部分を関数化している。eBPFでは、関数コールはサポートされて
+    いないので、__inline 指定が必須である。
+    なお、eBPFでは、ループが不可など、通常のCプログラムのようには書けない事項もあるので
+    注意。
+
+※4 ktime_get_ns()、map_lookup_elem()、map_update_elem() は、カーネルのヘルパー関数の
+    呼び出しとなる。カーネル内にもいくつかeBPFコードが用意されており、eBPFプログラムから
+    呼び出すことができる。(注: カーネルヘルパーは、関数コールできる)
+    使用できるヘルパーは、/usr/include/linux/bpf.h に定義されている。
+    本プログラムをコンパイルした、byte code 上は、ヘルパー関数のアドレスは、本当のアド
+    レスではなく、ヘルパー関数のenum値が入っている。カーネルにロードしたときに、カーネル
+    が本当のアドレスに変換する。(このような特殊なコンベンションがいくつかある。※5もそう。)
+
+※5 マップを操作するヘルパー関数である。参照しているmap struct ポインタは、byte code上では
+    マップのファイルディスクリプタが入っている。(ローダが挿入する。)
+    カーネルではプログラムロード時に、実際のマップのカーネル内構造体へのポインタへ変換する。
+
+4.2 コンパイル
+
+-------------------------------------------------------
+$ clang -O2 -Wall -target bpf -c mes_chk.c -o mes_chk.o
+-------------------------------------------------------
+
+clangでは、ターゲットとして、bpf をサポートしている。上記で、mes_chk.c がコンパイルされ、
+eBPF byte code 入り ELF ファイル mes_chk.o が出来た。
+
+4.3 bpfファイルシステムマウント
+
+------------------------------------
+$ sudo mount -t bpf none /sys/fs/bpf
+------------------------------------
+
+bpfファイルシステムがマウントされていなければ、マウントする。マウントポイントは任意である
+が、通常は、/sys/fs/bpf にマウントする慣習である。
+
+4.4 tc コマンド実行
+
+---------------------------------------------------------------------
+$ sudo tc qdisc add dev v1 clsact
+$ 
+sudo tc filter add dev v1 ingress bpf da obj mes_chk.o sec ingress
+$ 
+sudo tc qdisc add dev v2 clsact
+$ 
+sudo tc filter add dev v2 egress bpf da obj mes_chk.o sec egress
+---------------------------------------------------------------------
+
+上記では、インタフェース v1 の ingress qdisc に mes_chk.o の ingress セクションの eBPF
+プログラムを設定、インタフェース v2 の egress qdisc に mes_chk.o の egress セクション
+の eBPF プログラムを設定している。
+それぞれ、パケットが qdisc に入ったときに、eBPF プログラムが実行される。
+
+eBPFプログラムの内容であるが、特定のパケット(UDPの特定のポート番号)について、時刻を
+記録しているだけである。記録は、プログラム動作後から、一定の個数だけ行われる。
+目的は、v1のingress qdisc に入ってから、v2 のegress qdisc に入るまでに掛かった時間を
+計測することであるが、掛かった時間は後から計算する必要がある。
+
+4.5 マップアクセスプログラム
+
+マップを参照し、掛かった時間を計算するプログラムである。bpfシステムコールの使用例と
+して、上げた。
+
+なお、本プログラムは普通のCプログラムなので、「gcc -o mes_show mes_show.c」でコンパイル
+する。
+
+mes_show.c
+-------------------------------------------------------------------------------------
+#define _GNU_SOURCE
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <linux/bpf.h>
+#include "mes_chk.h"
+
+static int sys_bpf(int cmd, union bpf_attr *attr)
+{
+	int ret;
+
+	ret = syscall(__NR_bpf, cmd, attr, sizeof(*attr));                ※1
+	if (ret < 0) { 
+		perror("syscall error:");
+		exit(1);
+	}
+	return ret;
+}
+
+int main(int argc, char *argv[])
+{
+	char *path;
+	int fd_c, fd_s, fd_e;
+	union bpf_attr attr;
+	unsigned int cnt_s, cnt_e;
+	unsigned long s, e, t, total = 0, min = 0, max = 0, pre_e = 0;
+	int idx;
+	int vflag = 0, rcnt = 0;
+
+	if (argc == 2 && !strcmp("-v", argv[1])) {
+		vflag = 1;
+	}
+
+	bzero(&attr, sizeof(attr));                                       ※2
+	path = MES_MAP_CNT;
+	attr.pathname = (unsigned long)path;
+	attr.file_flags = BPF_F_RDONLY;
+	fd_c = sys_bpf(BPF_OBJ_GET, &attr);                               ※3
+
+	bzero(&attr, sizeof(attr));
+	path = MES_MAP_START;
+	attr.pathname = (unsigned long)path;
+	attr.file_flags = BPF_F_RDONLY;
+	fd_s = sys_bpf(BPF_OBJ_GET, &attr);
+
+	bzero(&attr, sizeof(attr));
+	path = MES_MAP_END;
+	attr.pathname = (unsigned long)path;
+	attr.file_flags = BPF_F_RDONLY;
+	fd_e = sys_bpf(BPF_OBJ_GET, &attr);
+
+	bzero(&attr, sizeof(attr));
+	attr.map_fd = fd_c;
+	idx = MES_CNT_IDX_START;
+	attr.key = (unsigned long)&idx;
+	attr.value = (unsigned long)&cnt_s;
+	sys_bpf(BPF_MAP_LOOKUP_ELEM, &attr);                               ※4
+
+	bzero(&attr, sizeof(attr));
+	attr.map_fd = fd_c;
+	idx = MES_CNT_IDX_END;
+	attr.key = (unsigned long)&idx;
+	attr.value = (unsigned long)&cnt_e;
+	sys_bpf(BPF_MAP_LOOKUP_ELEM, &attr);
+
+	for (idx = 0; idx < cnt_e; idx++) {
+		bzero(&attr, sizeof(attr));
+		attr.map_fd = fd_s;
+		attr.key = (unsigned long)&idx;
+		attr.value = (unsigned long)&s;
+		sys_bpf(BPF_MAP_LOOKUP_ELEM, &attr);
+
+		bzero(&attr, sizeof(attr));
+		attr.map_fd = fd_e;
+		attr.key = (unsigned long)&idx;
+		attr.value = (unsigned long)&e;
+		sys_bpf(BPF_MAP_LOOKUP_ELEM, &attr);
+
+		t = e - s;
+		total += t;
+		if (min == 0 || t < min) {
+			min = t;
+		}
+		if (t > max) {
+			max = t;
+		}
+		if (vflag) {
+			printf("%4d: %lu %lu %lu\n", idx, s, e, t);
+		}
+		if (s < pre_e) {
+			rcnt++;
+		}
+		pre_e = e;
+	}
+
+	printf("reverse count: %d\n", rcnt);
+	printf("count: %u/%u, total time: %lu ns, ave. time: %lu ns min: %lu ns max: %lu ns\n",
+		cnt_s, cnt_e, total, cnt_e != 0 ? total / cnt_e : 0, min, max);
+
+	return 0;
+}
+--------------------------------------------------------------------------------------
+
+※1 bpfシステムコールの呼び出し。bpfはlibcではサポートしていないので、syscallを使用。
+
+※2 union bpf_attr は、すべてのコマンドに対応しており、複雑。典型的には、本プログラム例
+    のように、0クリアして、必要なメンバのみ値を設定する。
+
+※3 BPF_OBJ_GET は、pin されたオブジェクトを取得(オープン)するコマンド。
+    前項のeBPFプログラムで作成(、pin)した3つのマップをオープンしている。
+
+※4 BPF_MAP_LOOKUP_ELEM は、マップの値を取得するコマンド。本プログラムで使用しているのは、
+    これと BPF_OBJ_GET のみ。
+
+5. kprobe タイプ
+
+tc を用いて、qdisc に eBPFプログラムのフックを設定できた。kprobe を用いれば、カーネルの
+任意の関数の呼び出し時に eBPF プログラムを実行することができる。本章では、その際のポイ
+ントについて簡単の説明する。
+
+5.1 eBPF プログラム
+
+ロードする際のプログラムタイプとして、BPF_PROG_TYPE_KPROBE を指定する。このタイプでは、
+eBPF プログラムへのパラメータは、「pt_regs *」となる。プログラムとしては、以下のような
+定義となる。
+
+----------------------------------------------------------------------------------------
+#include <linux/ptrace.h>
+
+int test_prog(struct pt_regs *ctx)
+{
+----------------------------------------------------------------------------------------
+
+関数の引数にアクセスしたい場合、例えば、x86_64 であれば、ctx->rdi に第一引数が格納され
+ている。
+
+5.2 ローダ
+
+一般的なローダは提供されていない。kprobe や trace 関連では、bcc を使うケースが多いと考え
+られる。bcc では、内部にローダが実装されている。ただし、bcc 自体に関しても、結構学習コス
+トが高い。
+
+5.3 eBPFの有効化
+
+ローダを自力で実装する場合のため、BPF_PROG_TYPE_KPROBE タイプの eBPF の有効化について、
+説明する。
+
+(1) kprobe イベントの設定
+
+
+
+kprobe用eBPFでは、まず、kprobeイベントを設定する必要がある。
+そのためには、/sys/kernel/debug/tracing/kprobe_events に書き込みを行う。
+
+
+書き込む形式は、以下のとおり。
+
+「p:kprobes/{event名} 関数名」
+
+event名は、任意の(ユニークな)文字列。後で参照する。関数名は、kprobe を掛けたいカーネルの
+関数名。
+(traceのためには、まだこの後にも定義するパラメータがあるが、eBPF用には、これで十分)
+
+
+指定例: 
+
+---------------------------------------------------------------------------------------
+# echo "p:kprobes/test_bpf sys_bpf" >> /sys/kernel/debug/tracing/kprobe_events
+---------------------------------------------------------------------------------------
+
+
+
+注意:
+「>>」を使うこと。「>」を使うと定義済のものが消えてしまう。
+
+(設定を個別に)削除したい場合は、「p」を「-」に変えて、書き込む。
+
+---------------------------------------------------------------------------------------
+# echo "-:kprobes/test_bpf" >> /sys/kernel/debug/tracing/kprobe_events
+
+-----------------------------------------------------------------------------------
+(上記の注意を逆手に取って、# echo > /sys/kernel/debug/tracing/kprobe_events とやれば、
+すべての設定を削除できる。)
+
+
+
+
+設定は、/sys/kernel/debug/tracing/kprobe_events を参照して確認できる。
+---------------------------------------------------------------------------------------
+# cat /sys/kernel/debug/tracing/kprobe_events
+
+p:kprobes/test_bpf sys_bpf
+
+#
+
+
+---------------------------------------------------------------------------------------
+
+設定を行うと、/sys/kernel/debug/tracing/events/kprobes/{event名} ディレクトリが作成され、
+いくつかのファイルができる。
+
+(正確には、eventsの下に設定した、kprobes/{event名} ができる。実は、kprobesの部分も任意で、
+ディレクトリによるグループ化が
+できるようになっている。)
+
+後で、idファイルを参照することになる。
+
+---------------------------------------------------------------------------------------
+# ls /sys/kernel/debug/tracing/events/kprobes/test_bpf
+
+enable  filter  format  hist  id  trigger
+
+# cat /sys/kernel/debug/tracing/events/kprobes/test_bpf/id
+
+1478
+
+#
+
+
+---------------------------------------------------------------------------------------
+
+(2) perf_event_open システムコールによる設定
+
+
+
+次に、(1)で設定したeventに対し、有効化、および、eBPFプログラムとの関連付けを行う。
+
+以下のようなコードとなる。(エラー処理は省略)
+
+
+---------------------------------------------------------------------------------------
+
+struct perf_event_attr ev_attr = {};
+
+ev_attr.config = 1478; // ここにidファイルの値を設定する。
+
+ev_attr.type = PERF_TYPE_TRACEPOINT;
+
+efd = syscall(__NR_perf_event_open, &ev_attr, -1/*pid*/, 0/*cpu*/, -1/*group_fd*/, 0);
+
+ioctl(efd, PERF_EVENT_IOC_ENABLE, 0); //トレースの有効化
+
+ioctl(efd, PERF_EVENT_IOC_SET_BPF, prog_fd); // eBPFプログラムをトレースに結びつける。                                                    // prog_fd は、eBPFプログラムロード時の
+                                             // ファイルディスクリプタ
+--------------------------------------------
+-------------------------------------------
+
+以上
