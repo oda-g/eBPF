@@ -36,10 +36,12 @@ https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 * 命令セット: instruction.rst_
 * bpftool: bpftool.rst_
 * bpfファイルシステム: bpf_filesystem.rst_
+* bpfシステムコール: bpf_syscall.rst_
 
 .. _instruction.rst: doc/instruction.rst
 .. _bpftool.rst: doc/bpftool.rst
 .. _bpf_filesystem.rst: doc/bpf_filesystem.rst
+.. _bpf_syscall.rst: doc/bpf_syscall.rst
 
 参考: 各種リンク
 ----------------
