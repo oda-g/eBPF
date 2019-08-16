@@ -1,2 +1,13 @@
-TC Example
-==========
+tc の例題
+=========
+
+準備
+----
+
+プログラムのコンパイルには、clang を使用するので、インストール。
+
+::
+
+  $ sudo apt istall calng lib6-dev-i386
+  
+
