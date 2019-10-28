@@ -1,0 +1,7 @@
+#!/bin/bash
+
+SYM=$1
+
+SYM_ADDR=$(sudo cat /proc/kallsyms | awk '{ if ($3 == "'$SYM'") print $1 }')
+
+sudo ./get_kval 0x$SYM_ADDR
