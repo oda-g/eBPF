@@ -75,7 +75,7 @@ output_event(void *map_base)
                 if (e_hdr->type == PERF_RECORD_SAMPLE) {
 			struct perf_event_sample *e = (void *)e_hdr;
 			printf("pid: %u, tid: %u, time: %lu\n",
-				e->pid, e->tid, e->time);	
+				e->pid, e->tid, e->time);
                 } else if (e_hdr->type == PERF_RECORD_LOST) {
 			struct perf_event_lost *lost = (void *)e_hdr;
                         fprintf(stderr, "lost %lu events\n", lost->lost);
@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* NOTE: This function will return without freeing resources
-	 * (open files, mapping memory). 
+	 * (open files, mapping memory).
 	 * They are expected to free at the process exit.
 	 */
 
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
 	}
 
 	perf_header = mmap(NULL, PAGE_SIZE * (NR_DATA_PAGE + 1),
-		       	PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+			PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (perf_header == MAP_FAILED) {
 		fprintf(stderr, "mmap falied");
 		return 1;

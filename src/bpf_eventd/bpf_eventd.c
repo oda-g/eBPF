@@ -76,7 +76,7 @@ output_event(void *map_base)
 			struct perf_event_sample *e = (void *)e_hdr;
 			struct bpf_sys_data *d = (void *)e->data;
 			printf("cmd: %u, cpu: %u, time: %lu\n",
-				d->cmd, d->cpu, d->time);	
+				d->cmd, d->cpu, d->time);
                 } else if (e_hdr->type == PERF_RECORD_LOST) {
 			struct perf_event_lost *lost = (void *)e_hdr;
                         fprintf(stderr, "lost %lu events\n", lost->lost);
@@ -193,7 +193,7 @@ int main(int argc, char *argv[])
 		}
 
 		base = mmap(NULL, PAGE_SIZE * (NR_DATA_PAGE + 1),
-			       	PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+			PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 		if (base == MAP_FAILED) {
 			fprintf(stderr, "mmap(%d) falied: %s\n",
 				       i, strerror(errno));
