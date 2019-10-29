@@ -269,14 +269,8 @@ bpftoolで、マップやプログラムがロードされていることを確�
 
 ::
 
-  ### tcの解除
+  ### tcの解除、マップファイルの削除(スクリプト参照)
   $ bash tc-del.sh
   ### network namespaceの削除(スクリプト用意していないので手動で)
   $ sudo ip netns del ns1
   $ sudo ip netns del ns2
-  ### マップファイルは残ったままなので、削除(スクリプトは用意していないので手動で)
-  $ sudo rm /sys/fs/bpf/tc/global/map_mes_start
-  $ sudo rm /sys/fs/bpf/tc/global/map_mes_end
-  $ sudo rm /sys/fs/bpf/tc/global/map_mes_cnt
-
-
