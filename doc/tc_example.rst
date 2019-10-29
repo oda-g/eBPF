@@ -195,12 +195,88 @@ src/measure_packet/ の下に、お手軽に確認できるスクリプト類を
             |   |              |   |
             |   +--------------+   |
             |                      |
-       +----+----+            +----+----+
-       |    ■    |            |    ■    |
-       |    n1   |            |    n2   |
-       +---------+            +---------+
-           ns1                    ns2
+       +----+---------+       +----+---------+
+       |    ■ n1      |       |    ■ n2      |
+       | 192.168.10.1 |       | 192.168.10.2 |
+       +--------------+       +--------------+
+             ns1                    ns2
            
+network namespaceを2つ作成し、それぞれにvethインタフェースを定義して、ブリッジで接続。環境を作成するスクリプトns-prep.shを用意してある。
 
+::
+
+  $ bash ns-prep.sh
+
+準備
+^^^^
+
+bpfファイルシステムがマウントされているか確認。
+
+プログラムのロード、有効化
+^^^^^^^^^^^^^^^^^^^^^^
+
+コマンドは以下のとおり。
+
+::
+
+  sudo tc qdisc add dev v1 clsact
+  #                        ^^^^^^ clsactクラスのqdiscを設定
+  sudo tc filter add dev v1 ingress bpf da obj mes_pkt.o sec ingress
+  #                         ^^ingress側に設定   ^^object file ^^section
+  sudo tc qdisc add dev v2 clsact
+  sudo tc filter add dev v2 egress bpf da obj mes_pkt.o sec egress
+
+BPF_PROG_SCHED_CLSタイプのbpfプログラムの場合、有効化は、netlinkソケットを通して何やら行う。tcコマンドがやっている。
+
+スクリプトを用意してある。
+
+::
+
+  $ bash tc-set.sh
   
+bpftoolで、マップやプログラムがロードされていることを確認できる。
+
+::
+
+  $ sudo bpftool map show
+  $ sudo bpftool prog show
+
+パケット送信
+^^^^^^^^^^
+
+例えば、以下のように対象のパケットを送信することができる。
+
+::
+
+  ### ns2内で ###
+  $ nc -u -l 5001
+  ### ns1内で ###
+  $ nc -u 192.168.10.2 5001
+  ...適当にタイプ...
+  
+結果確認
+^^^^^^^
+
+マップファイルを参照するプログラムmes_showを用意してあるので、実行する。
+
+::
+
+  $ make mes_show
+  $ sudo ./mes_show
+
+後始末
+^^^^^
+
+::
+
+  ### tcの解除
+  $ bash tc-del.sh
+  ### network namespaceの削除(スクリプト用意していないので手動で)
+  $ sudo ip netns del ns1
+  $ sudo ip netns del ns2
+  ### マップファイルは残ったままなので、削除(スクリプトは用意していないので手動で)
+  $ sudo rm /sys/fs/bpf/tc/global/map_mes_start
+  $ sudo rm /sys/fs/bpf/tc/global/map_mes_end
+  $ sudo rm /sys/fs/bpf/tc/global/map_mes_cnt
+
 
