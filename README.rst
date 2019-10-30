@@ -44,7 +44,7 @@ https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 .. _bpftool.rst: doc/bpftool.rst
 .. _bpf_filesystem.rst: doc/bpf_filesystem.rst
 .. _bpf_syscall.rst: doc/bpf_syscall.rst
-.. _bpf_example_1_tc.rst: doc/bpf_examle_1_tc.rst
+.. _bpf_example_1_tc.rst: doc/bpf_example_1_tc.rst
 
 参考: 各種リンク
 ----------------
