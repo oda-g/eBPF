@@ -29,6 +29,7 @@ https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 そこで、以下にビルドした順番を示しておく。これに合わせると、ドキュメントとの乖離が少なくて済むと思われる。
 
 #. bpftool
+#. bpfプログラムの作成と実行(1)(tc)
 
 本リポジトリ内リンク
 --------------------
@@ -37,11 +38,13 @@ https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 * bpftool: bpftool.rst_
 * bpfファイルシステム: bpf_filesystem.rst_
 * bpfシステムコール: bpf_syscall.rst_
+* bpfプログラムの作成と実行(1)(tc): bpf_example_1_tc.rst_
 
 .. _instruction.rst: doc/instruction.rst
 .. _bpftool.rst: doc/bpftool.rst
 .. _bpf_filesystem.rst: doc/bpf_filesystem.rst
 .. _bpf_syscall.rst: doc/bpf_syscall.rst
+.. _bpf_example_1_tc.rst: doc/bpf_examle_1_tc.rst
 
 参考: 各種リンク
 ----------------
