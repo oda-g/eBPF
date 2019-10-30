@@ -131,3 +131,72 @@ event名は、任意の(ユニークな)文字列。後で参照する。関数�
    316		if (ioctl(efd, PERF_EVENT_IOC_SET_BPF, prog_fd) < 0) {  // bpfプログラムをトレースに結び付ける。
           // prog_fd は、bpfプログラムロード時に返されたファイルディスクリプタ。
 
+動作確認例
+---------
+
+テストプログラム
+^^^^^^^^^^^^^^
+
+src/load_kprobe_bpf/test_prog.c 参照。
+
+カーネル関数sys_bpf()にkprobeを設定することを前提。sys_bpfの第一引数がBPF_PROG_GET_FD_BY_IDの場合、マップのカウントアップをする。
+
+::
+
+     5	#define PT_REGS_PARM1(x) ((x)->rdi)  /* for x86_64 */
+   ...
+    17	__section("prog")
+    18	int test_prog(struct pt_regs *ctx)
+    19	{
+    20		uint32_t idx, *cnt;
+    21		int cmd = (int)PT_REGS_PARM1(ctx);
+
+kprobeタイプのプログラムに渡ってくる引数は、struct pt_regs構造体ポインタである。kprobeで設定したカーネル関数が呼び出されたときのレジスタ情報が格納されている。x86_64の場合は、rdiを参照すれば、第一引数が分かる。
+
+準備
+^^^^
+
+bpfファイルシステムは、マウントしておく。
+
+プログラムのコンパイル。(Makefile参照)
+
+::
+
+  $ make
+  $ make test_prog.o
+  
+動作確認
+^^^^^^^
+
+プログラムのロード:
+
+::
+
+  $ sudo ./load_kp_bpf test_prog.o sys_bpf
+  Running.
+  (このままフォアグランドで動作し続ける)
+
+別の端末で、bpftool を実行。
+
+::
+
+  $ sudo bpftool map show
+  (test_map_cnt の idを確認)
+  $ sudo bpftool map dump id <id>
+  (valueを確認。まだ、0)
+  $ sudo bpftool prog show
+  ...
+  $ sudo bpftool map dump id <id>
+  (valueを確認。増えている)
+  (map show では、カウントは増えないが、prog show でカウントが増えることを確認)
+  
+プログラムの終了: load_kp_bpf実行中の端末に戻って、Ctl-C 押下。
+
+::
+
+  $ sudo ./load_kp_bpf test_prog.o sys_bpf
+  Running.
+  ^CTerminate.
+  $
+  
+(イベントの削除は行っているが、マップの削除はしていない。マップの削除は手動で。)
