@@ -37,6 +37,7 @@ progセクションにバイトコードが格納されているので、それ�
 
 コードは、load_kp_bpf.c get_bpf_obj_info 参照。
 
+.. _prog-load:
 プログラムのロード
 ^^^^^^^^^^^^^^^^
 
@@ -175,6 +176,8 @@ bpfファイルシステムは、マウントしておく。
   $ sudo ./load_kp_bpf test_prog.o sys_bpf
   Running.
   (このままフォアグランドで動作し続ける)
+  
+(EINVALでエラーになる場合は、:ref:'prog-load'の注意事項参照。)
 
 別の端末で、bpftool を実行。
 
