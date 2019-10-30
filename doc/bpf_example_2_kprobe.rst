@@ -50,3 +50,84 @@ load_kp_bpf.c load_program 参照。以下、注意事項のみ記す。
 * bpfプログラムにエラーがあったとき、log_bufにいろいろとメッセージが格納される。エラー発生時、log_bufの大きさが足りないと、ENOSPCのエラーとなり、エラーの解析ができないので、十分な大きさを用意すること。
 * licenseは、GPL(コンパチ)でないといけない。本来は、tcの例のようにCプログラム側のセクションで指定すべきだが、本プログラムは決め打ちで入れている。
 
+プログラムの有効化
+^^^^^^^^^^^^^^^
+
+load_kp_bpf.c set_event 参照。以下の手順で行う。
+
+(1) kprobe イベントの設定
+~~~~~~~~~~~~~~~~~~~~~~~
+
+kprobe用eBPFでは、まず、kprobeイベントを設定する必要がある。
+そのためには、/sys/kernel/debug/tracing/kprobe_events に書き込みを行う。
+
+書き込む形式は、以下のとおり。
+
+「p:kprobes/{event名} 関数名」
+
+event名は、任意の(ユニークな)文字列。後で参照する。関数名は、kprobe を掛けたいカーネルの関数名。
+(traceのためには、まだこの後にも定義するパラメータがあるが、eBPF用には、これで十分)
+
+
+指定例: 
+
+::
+
+# echo "p:kprobes/test_bpf sys_bpf" >> /sys/kernel/debug/tracing/kprobe_events
+
+注意:「>>」を使うこと。「>」を使うと定義済のものが消えてしまう。
+
+(設定を個別に)削除したい場合は、「p」を「-」に変えて、書き込む。
+
+::
+
+  # echo "-:kprobes/test_bpf" >> /sys/kernel/debug/tracing/kprobe_events
+
+(前記の注意を逆手に取って、「echo > /sys/kernel/debug/tracing/kprobe_events」 とやれば、すべての設定を削除できる。)
+
+設定は、/sys/kernel/debug/tracing/kprobe_events を参照して確認できる。
+
+::
+
+  # cat /sys/kernel/debug/tracing/kprobe_events
+  p:kprobes/test_bpf sys_bpf
+  #
+
+設定を行うと、/sys/kernel/debug/tracing/events/kprobes/{event名} ディレクトリが作成され、いくつかのファイルができる。
+(正確には、eventsの下に設定した、kprobes/{event名} ができる。実は、kprobesの部分も任意で、ディレクトリによるグループ化ができるようになっている。)
+
+作成されたファイルの内、後で、idファイルを参照することになる。
+
+::
+
+  # ls /sys/kernel/debug/tracing/events/kprobes/test_bpf
+  enable  filter  format  hist  id  trigger
+  # cat /sys/kernel/debug/tracing/events/kprobes/test_bpf/id
+  1478
+  #
+
+(2) perf_event_open システムコールによる設定
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+次に、(1)で設定したeventに対し、有効化、および、eBPFプログラムとの関連付けを行う。
+
+以下、コードを参照しつつ手順をコメント。
+
+::
+
+   282		struct perf_event_attr ev_attr = {};
+   283		int efd;
+   ...
+   286		int id;
+   ...
+   302		ev_attr.config = id;  // idファイルの内容を指定
+   303		ev_attr.type = PERF_TYPE_TRACEPOINT;
+   304	
+   305		efd = syscall(__NR_perf_event_open, &ev_attr,       // トレースの定義
+   306			       -1/*pid*/, 0/*cpu*/, -1/*group_fd*/, 0);
+   ...
+   311		if (ioctl(efd, PERF_EVENT_IOC_ENABLE, 0) < 0) {     // トレースの有効化
+   ...
+   316		if (ioctl(efd, PERF_EVENT_IOC_SET_BPF, prog_fd) < 0) {  // bpfプログラムをトレースに結び付ける。
+          // prog_fd は、bpfプログラムロード時に返されたファイルディスクリプタ。
+
