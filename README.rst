@@ -39,12 +39,14 @@ https://github.com/iovisor/bcc/blob/master/docs/kernel-versions.md
 * bpfファイルシステム: bpf_filesystem.rst_
 * bpfシステムコール: bpf_syscall.rst_
 * bpfプログラムの作成と実行(1)(tc): bpf_example_1_tc.rst_
+* bpfプログラムの作成と実行(2)(kprobe): bpf_example_2_kprobe.rst_
 
 .. _instruction.rst: doc/instruction.rst
 .. _bpftool.rst: doc/bpftool.rst
 .. _bpf_filesystem.rst: doc/bpf_filesystem.rst
 .. _bpf_syscall.rst: doc/bpf_syscall.rst
 .. _bpf_example_1_tc.rst: doc/bpf_example_1_tc.rst
+.. _bpf_example_2_kprobe.rst: doc/bpf_example_2_kprobe.rst
 
 参考: 各種リンク
 ----------------
