@@ -41,3 +41,9 @@ src/bpf_evend/test_prog.c 参照。
 
 上記プログラムでは、sys_bpf関数にkprobeを設定することを前提としており、イベントデータとしては、sys_bpfのコマンド、実行CPU、実行時刻を出力するようにしている。(bpf_sys_data構造体 は、bpf_eventd.h 参照)
 
+補足: 本例題では、マップbpf_sys_cntの作成と中身の設定は、受け取り側プログラムで行うことを前提としている。ローダー実行時、bpf_sys_cnt が存在することを仮定しており、mapsセクションの設定内容は適当である。
+
+受け取り側プログラム
+-----------------
+
+src/bpf_eventd/bpf_eventd.c 参照。
