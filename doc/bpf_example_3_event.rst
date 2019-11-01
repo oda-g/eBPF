@@ -274,8 +274,66 @@ src/bpf_evend/test_prog.c 参照。
   ### 別の端末で ###
   ### bpftool を適当に実行し、観察 ###
   $ sudo bpftool map show
-  $ sudo taskset 4 bpftool prog shoe
+  $ sudo taskset 4 bpftool prog show
   ...
   
   終了は、load_kp_bpf、bpf_eventd の順で。
   
+補足: リングバッファのアクセスについて
+---------------------------------
+
+cs_eventd.c、bpf_eventd.c の output_event()に関する注意事項。(以下、コードは、bpf_eventd.c のものを参照)
+
+本関数は、カーネルコードの samples/bpf/trace_output_user.c perf_event_read()を参考に作成した。(大体、中身は同じ)
+
+::
+
+    41		volatile struct perf_event_mmap_page *header = map_base;
+
+perf_event_mmap_page構造体(リングバッファの先頭にある)は、プログラム以外の人(カーネル)もデータを更新するため、volatile宣言が必要である。
+本プログラム中でも、map_baseやdata_headは、プログラム中では更新していないので、油断は大敵である。
+
+::
+
+    48		asm volatile("" ::: "memory"); /* smp_rmb() for x86_64 */
+   ...
+    89		__sync_synchronize(); /* smp_mb() */
+
+メモリバリア。
+
+メモリバリアに関しては、カーネルコードの doc/Documentation/memory-barriers.txt に詳しい。( https://www.kernel.org/doc/Documentation/memory-barriers.txt )
+
+メモリバリアについては、カーネル側と対で考える必要がある。カーネル側に関しては、kernel/events/ring_buffer.c perf_output_put_handle()のコメントに関連する記述がある。
+
+::
+
+
+	/*
+	 * Since the mmap() consumer (userspace) can run on a different CPU:
+	 *
+	 *   kernel				user
+	 *
+	 *   if (LOAD ->data_tail) {		LOAD ->data_head
+	 *			(A)		smp_rmb()	(C)
+	 *	STORE $data			LOAD $data
+	 *	smp_wmb()	(B)		smp_mb()	(D)
+	 *	STORE ->data_head		STORE ->data_tail
+	 *   }
+	 *
+	 * Where A pairs with D, and B pairs with C.
+	 *
+	 * In our case (A) is a control dependency that separates the load of
+	 * the ->data_tail and the stores of $data. In case ->data_tail
+	 * indicates there is no room in the buffer to store $data we do not.
+	 *
+	 * D needs to be a full barrier since it separates the data READ
+	 * from the tail WRITE.
+	 *
+	 * For B a WMB is sufficient since it separates two WRITEs, and for C
+	 * an RMB is sufficient since it separates two READs.
+	 *
+	 * See perf_output_begin().
+	 */
+    
+
+
