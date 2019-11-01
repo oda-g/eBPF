@@ -198,6 +198,7 @@ CPUごとにperf_event_open(171行)、ioctl(PERF_EVENT_IOC_ENABLE)(189行)、mma
 
 
 ::
+
    214		for (;;) {
    215			if (poll(pfd, nr_cpu, -1) == -1) {
    216				perror("poll");
@@ -251,3 +252,30 @@ src/bpf_evend/test_prog.c 参照。
 
 補足: 本例題では、マップbpf_sys_cntの作成と中身の設定は、受け取り側プログラムで行うことを前提としている。ローダー実行時、bpf_sys_cnt が存在することを仮定しており、mapsセクションの設定内容は適当である。
 
+動作確認
+-------
+
+::
+
+  ### ビルド。Makefile参照 ###
+  $ make bpf_eventd
+  $ make test_prog.o
+  ### bpf_eventd 実行 ###
+  $ sudo ./bpf_eventd
+  Running.
+  ### フォアグランドで動作(名前はデーモン風であるが)。イベントが取れれば端末に出力する。終了は、Ctl-C押下。
+  
+  ### 別の端末で ###
+  ### bpfプログラムのロード ###
+  $ sudo ../load_kprobe_bpf/load_kp_bpf test_prog.o sys_bpf
+  Running.
+  ### フォアグランドで動作。終了は、Ctl-C押下。
+  
+  ### 別の端末で ###
+  ### bpftool を適当に実行し、観察 ###
+  $ sudo bpftool map show
+  $ sudo taskset 4 bpftool prog shoe
+  ...
+  
+  終了は、load_kp_bpf、bpf_eventd の順で。
+  
