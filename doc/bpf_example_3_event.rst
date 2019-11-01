@@ -101,11 +101,23 @@ mmapした領域は上図のようになっている。最初の1ページは、
 
 head は、カーネルが次にイベントデータを書く場所をポイントしており、更新はカーネルが行う。
 
-tail は、プログラムが読んだ最後の場所をポイントしており、更新はプログラムが行う。未読データがない場合は、head == tail である。
+tail は、ユーザプログラムが読んだ最後の場所をポイントしており、更新はユーザプログラムが行う。未読データがない場合は、head == tail である。
 
 poll で wakeup された後、tail と head の差分の間を読み込み、tail を更新する。
 
+::
 
+    26	struct perf_event_sample {
+    27	        struct perf_event_header header;
+    28	        uint32_t pid, tid;
+    29	        uint64_t time;
+    30	};
+
+今回の例では、イベントレコードは上記の内容になっている。イベントレコードの詳細については、linux/perf_event.h の「enum perf_event_type」の注釈を参照。「ev_attr.sample_type = PERF_SAMPLE_TID | PERF_SAMPLE_TIME;」で指定したメンバが、前から詰まって格納される。
+
+補足: コード中の「e_hdr->type == PERF_RECORD_LOST」は、未読データでリングバッファが一杯になった(tailがheadに追いついた)場合、レコードはロストするが、そのロストした数を記録しており、場所が空いた際にstruct perf_event_lost の形式でレコードが格納される。
+
+補足: output_event()の微妙な処理については、本資料の最後にメモを記す。
 
 bpfプログラム側の処理
 -------------------
