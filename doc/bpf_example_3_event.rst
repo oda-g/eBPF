@@ -80,9 +80,9 @@ perf_event_open で返ってきた fd に対して、poll を実行すること�
                    | perf_event_mmap_page 構造体  |
                    |                             |
                    |                             |
-            +------+ head                        | 1ページ
+            +------+ data_head                   | 1ページ
             |      |                             |
-            |  +---+ tail                        |
+            |  +---+ data_tail                   |
             |  |   |                             |
             |  |   +-----------------------------+
             |  |   |                             |
@@ -97,13 +97,13 @@ perf_event_open で返ってきた fd に対して、poll を実行すること�
                    |                             |
                    +-----------------------------+
 
-mmapした領域は上図のようになっている。最初の1ページは、perf_event_mmap_page 構造体で各種管理データがあるが、今回使っているのは、head と tail だけである。
+mmapした領域は上図のようになっている。最初の1ページは、perf_event_mmap_page 構造体で各種管理データがあるが、今回使っているのは、data_head と data_tail だけである。
 
-head は、カーネルが次にイベントデータを書く場所をポイントしており、更新はカーネルが行う。
+data_head は、カーネルが次にイベントデータを書く場所をポイントしており、更新はカーネルが行う。
 
-tail は、ユーザプログラムが読んだ最後の場所をポイントしており、更新はユーザプログラムが行う。未読データがない場合は、head == tail である。
+data_tail は、ユーザプログラムが読んだ最後の場所をポイントしており、更新はユーザプログラムが行う。未読データがない場合は、data_head == data_tail である。
 
-poll で wakeup された後、tail と head の差分の間を読み込み、tail を更新する。
+poll で wakeup された後、data_tail と data_head の差分の間を読み込み、data_tail を更新する。
 
 ::
 
@@ -115,7 +115,7 @@ poll で wakeup された後、tail と head の差分の間を読み込み、ta
 
 今回の例では、イベントレコードは上記の内容になっている。イベントレコードの詳細については、linux/perf_event.h の「enum perf_event_type」の注釈を参照。「ev_attr.sample_type = PERF_SAMPLE_TID | PERF_SAMPLE_TIME;」で指定したメンバが、前から詰まって格納される。
 
-補足: コード中の「e_hdr->type == PERF_RECORD_LOST」は、未読データでリングバッファが一杯になった(tailがheadに追いついた)場合、レコードはロストするが、そのロストした数を記録しており、場所が空いた際にstruct perf_event_lost の形式でレコードが格納される。
+補足: コード中の「e_hdr->type == PERF_RECORD_LOST」は、未読データでリングバッファが一杯になった(data_tailがdata_headに追いついた)場合、レコードはロストするが、そのロストした数を記録しており、場所が空いた際にstruct perf_event_lost の形式でレコードが格納される。
 
 補足: 本コードでは簡単に動作確認するため、printfで情報表示しているが、通常、イベントのデータは多くなりがちで、標準出力への出力はオーバヘッドが大きいので、ファイルにバイナリで出力することになろう。
 その際の注意点であるが、ひとつひとつのイベントレコードは、キャッシュラインの倍数に合わせられるため、思った大きさと異なることに注意。実際の大きさは、perf_event_headerのsizeメンバを確認する必要がある。(レコードサイズ != sizeof(struct perf_event_sample) かもしれない)
