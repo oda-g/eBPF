@@ -133,11 +133,88 @@ poll で wakeup された後、tail と head の差分の間を読み込み、ta
   ### cs_eventdをCPU2で実行。CPU3を観察。
   $ sudo taskset 4 ./cs_eventd 3
   Running.
+  ### フォアグランドで動作(名前はデーモン風であるが)。イベントが取れれば端末に出力する。終了は、Ctl-C押下。
   
   ### 別の端末で ###
-  $ sudo taskset 8 適当なコマンド ### 「printf("%d\n", get_pid());」を実行するプログラムだと、観察が容易 ###
+  ### CPU3 でコマンド実行 ###
+  $ sudo taskset 8 適当なコマンド ### 例えば、「printf("%d\n", get_pid());」を実行するプログラムだと、観察が容易 ###
 
-cs_eventd実行端末に情報が表示される。終了は、Ctl-C押下。
+bpfプログラムのイベント取得
+------------------------
+
+src/bpf_eventd/bpf_eventd.c 参照。
+
+ユーザプログラム側の処理は、cs_eventdと基本的に同様。固有の事情は以下のとおり。
+
+* bpfプログラムから、perf_event ファイルディスクリプタが分かるように、BPF_MAP_TYPE_PERF_EVENT_ARRAYタイプのマップにファイルディスクリプタを格納する。
+* BPF_MAP_TYPE_PERF_EVENT_ARRAYは、エントリ数がCPU数、キーがCPU番号、値がファイルディスクリプタの形式のマップである。
+* イベント採取は、CPUごとに行われ、リングバッファもCPUごとに用意する必要がある。
+
+::
+
+   154		map_fd = map_open(nr_cpu);
+
+BPF_MAP_TYPE_PERF_EVENT_ARRAYタイプのマップ(名前は、bpf_sys_cnt)のオープン。詳細は、map_open()のコード参照。
+
+::
+
+   159		bzero(pfd, sizeof(pfd));
+   160		bzero(&ev_attr, sizeof(ev_attr));
+   161		ev_attr.sample_type = PERF_SAMPLE_RAW;
+   162		ev_attr.type = PERF_TYPE_SOFTWARE;
+   163		ev_attr.config = PERF_COUNT_SW_BPF_OUTPUT;
+   164		ev_attr.sample_period = 1;
+   165		ev_attr.wakeup_events = 1;
+
+cs_eventdとは、sample_typeとconfigが異なる。sample_typeのPERF_SAMPLE_RAWは、データの中身の形式がユーザ定義であることを示す。configの指定は、イベントがbpfプログラムからのものであることを示す。
+
+::
+
+   166		for (i = 0; i < nr_cpu; i++) {
+   167			int fd;
+   168			union bpf_attr attr;
+   169			void *base;
+   170	
+   171			fd = syscall(__NR_perf_event_open, &ev_attr, -1, i, -1,
+   172					PERF_FLAG_FD_CLOEXEC);
+   ...
+   179			bzero(&attr, sizeof(attr));
+   180			attr.map_fd = map_fd;
+   181			attr.key = (unsigned long)&i;
+   182			attr.value = (unsigned long)&fd;
+   183			if (bpf_sys(BPF_MAP_UPDATE_ELEM, &attr) < 0) {
+   ...
+   189			if (ioctl(fd, PERF_EVENT_IOC_ENABLE, 0) < 0) {
+   ...
+   195			base = mmap(NULL, PAGE_SIZE * (NR_DATA_PAGE + 1),
+   196				PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+   ...
+   203			pfd[i].fd = fd;
+   204			pfd[i].events = POLLIN;
+   205			perf_header[i] = base;
+   206		}
+
+CPUごとにperf_event_open(171行)、ioctl(PERF_EVENT_IOC_ENABLE)(189行)、mmap(195行)を行う。また、ファイルディスクリプタをマップに格納する(183行)。
+
+
+::
+   214		for (;;) {
+   215			if (poll(pfd, nr_cpu, -1) == -1) {
+   216				perror("poll");
+   217				return 1;
+   218			}
+   219			for (i = 0; i < nr_cpu; i++) {
+   220				if (pfd[i].revents | POLLIN) {
+   221					output_event(perf_header[i]);
+   222				} else if (pfd[i].revents != 0) {
+   223					fprintf(stderr, "poll(%d) error revents(%d)\n",
+   224							i, pfd[i].revents);
+   225					return 1;
+   226				}
+   227			}
+   228		}
+
+pollのところは、pfdの数が増えているだけで、cs_eventdと同様。
 
 bpfプログラム側の処理
 -------------------
@@ -165,7 +242,7 @@ src/bpf_evend/test_prog.c 参照。
 イベントログの出力には、perf_event_output ヘルパー関数を使用する。パラメータは以下のとおり。
 
 * コンテキスト: bpfプログラムに渡ってきたものをそのまま渡せばよい。
-* BPF_MAP_TYPE_PERF_EVENT_ARRAYタイプのマップへの参照。(内容は後述
+* BPF_MAP_TYPE_PERF_EVENT_ARRAYタイプのマップへの参照。
 * CPU番号(==マップのインデックス)。上記のBPF_F_CURRENT_CPUは、本bpfプログラムを実行したCPUを意味する。
 * 出力データのアドレス(void *)。
 * 出力データの大きさ。出力データの中身は任意である。
@@ -174,7 +251,3 @@ src/bpf_evend/test_prog.c 参照。
 
 補足: 本例題では、マップbpf_sys_cntの作成と中身の設定は、受け取り側プログラムで行うことを前提としている。ローダー実行時、bpf_sys_cnt が存在することを仮定しており、mapsセクションの設定内容は適当である。
 
-受け取り側プログラム
------------------
-
-src/bpf_eventd/bpf_eventd.c 参照。
