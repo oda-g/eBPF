@@ -182,6 +182,29 @@ crash使用例
     }, 
     ...
     
-メモリリード::
+メモリ内容確認::
+
+  crash> rd pid_max
+  ffffffff96a59e98:  0000000000008000                    ........
+  crash> rd ffffffff96a59e98
+  ffffffff96a59e98:  0000000000008000                    ........
+
+逆アセンブルリスト::
+
+crash> dis ring_buffer_poll_wait
+0xffffffff9576d150 <ring_buffer_poll_wait>:     push   %rbp
+0xffffffff9576d151 <ring_buffer_poll_wait+1>:   cmp    $0xffffffff,%esi
+0xffffffff9576d154 <ring_buffer_poll_wait+4>:   mov    %rsp,%rbp
+0xffffffff9576d157 <ring_buffer_poll_wait+7>:   push   %r13
+0xffffffff9576d159 <ring_buffer_poll_wait+9>:   lea    0x60(%rdi),%r13
+0xffffffff9576d15d <ring_buffer_poll_wait+13>:  push   %r12
+0xffffffff9576d15f <ring_buffer_poll_wait+15>:  push   %rbx
+0xffffffff9576d160 <ring_buffer_poll_wait+16>:  je     0xffffffff9576d185 <ring_buffer_poll_wait+53>
+...
+0xffffffff9576d1b3 <ring_buffer_poll_wait+99>:  lock addl $0x0,-0x4(%rsp)
+...
+
+(「lock addl $0x0,-0x4(%rsp)」== smp_mb())
+
 
 
