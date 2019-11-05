@@ -47,4 +47,97 @@ crash使用例
 起動::
 
   $ sudo crash /usr/lib/debug/boot/vmlinux-4.15.0-20-generic
-  
+  crash 7.2.1
+  Copyright (C) 2002-2017  Red Hat, Inc.
+  Copyright (C) 2004, 2005, 2006, 2010  IBM Corporation
+  Copyright (C) 1999-2006  Hewlett-Packard Co
+  Copyright (C) 2005, 2006, 2011, 2012  Fujitsu Limited
+  Copyright (C) 2006, 2007  VA Linux Systems Japan K.K.
+  Copyright (C) 2005, 2011  NEC Corporation
+  Copyright (C) 1999, 2002, 2007  Silicon Graphics, Inc.
+  Copyright (C) 1999, 2000, 2001, 2002  Mission Critical Linux, Inc.
+  This program is free software, covered by the GNU General Public License,
+  and you are welcome to change it and/or distribute copies of it under
+  certain conditions.  Enter "help copying" to see the conditions.
+  This program has absolutely no warranty.  Enter "help warranty" for details.
+ 
+  GNU gdb (GDB) 7.6
+  Copyright (C) 2013 Free Software Foundation, Inc.
+  License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+  This is free software: you are free to change and redistribute it.
+  There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+  and "show warranty" for details.
+  This GDB was configured as "x86_64-unknown-linux-gnu"...
+
+  WARNING: kernel relocated [326MB]: patching 99211 gdb minimal_symbol values
+
+  crash: read error: kernel virtual address: ffffffff96a4a268  type: "page_offset_base"
+  crash: this kernel may be configured with CONFIG_STRICT_DEVMEM, which
+         renders /dev/mem unusable as a live memory source.
+  crash: trying /proc/kcore as an alternative to /dev/mem
+
+        KERNEL: /usr/lib/debug/boot/vmlinux-4.15.0-20-generic
+      DUMPFILE: /proc/kcore
+          CPUS: 4
+          DATE: Tue Nov  5 09:17:48 2019
+        UPTIME: 64 days, 12:08:11
+  LOAD AVERAGE: 0.35, 0.35, 0.26
+         TASKS: 156
+      NODENAME: ebpf1
+       RELEASE: 4.15.0-20-generic
+       VERSION: #21-Ubuntu SMP Tue Apr 24 06:16:15 UTC 2018
+       MACHINE: x86_64  (1797 Mhz)
+        MEMORY: 19.5 GB
+           PID: 21221
+       COMMAND: "crash"
+          TASK: ffff88d854a0dc00  [THREAD_INFO: ffff88d854a0dc00]
+           CPU: 1
+         STATE: TASK_RUNNING (ACTIVE)
+  crash>
+
+
+構造体確認::
+
+  crash> struct -o sk_buff
+  struct sk_buff {
+          union {
+              struct {
+      [0]         struct sk_buff *next;
+      [8]         struct sk_buff *prev;
+                  union {
+     [16]             struct net_device *dev;
+     [16]             unsigned long dev_scratch;
+                  };
+              };
+      [0]     struct rb_node rbnode;
+          };
+     [24] struct sock *sk;
+          union {
+     [32]     ktime_t tstamp;
+     [32]     u64 skb_mstamp;
+          };
+     [40] char cb[48];
+          union {
+              struct {
+     [88]         unsigned long _skb_refdst;
+     [96]         void (*destructor)(struct sk_buff *);
+              };
+     [88]     struct list_head tcp_tsorted_anchor;
+    ...
+    [186] __u16 inner_transport_header;
+    [188] __u16 inner_network_header;
+    [190] __u16 inner_mac_header;
+    [192] __be16 protocol;
+    [194] __u16 transport_header;
+    [196] __u16 network_header;
+    [198] __u16 mac_header;
+    [200] __u32 headers_end[];
+    [200] sk_buff_data_t tail;
+    [204] sk_buff_data_t end;
+    [208] unsigned char *head;
+    [216] unsigned char *data;
+    [224] unsigned int truesize;
+    [228] refcount_t users;
+  }
+  SIZE: 232
+
