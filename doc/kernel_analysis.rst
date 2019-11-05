@@ -141,3 +141,47 @@ crash使用例
   }
   SIZE: 232
 
+カーネルモジュール内に定義された構造体やシンボルの確認には、ロードが必要。
+
+::
+
+  crash> mod
+       MODULE       NAME                      SIZE  OBJECT FILE
+  ffffffffc024b480  pata_acpi                16384  (not loaded)  [CONFIG_KALLSYMS]
+  ffffffffc025db00  floppy                   77824  (not loaded)  [CONFIG_KALLSYMS]
+  ffffffffc0267040  sysfillrect              16384  (not loaded)  [CONFIG_KALLSYMS]
+  ffffffffc0270500  i2c_piix4                24576  (not loaded)  [CONFIG_KALLSYMS]
+  ffffffffc027f880  virtio_net               45056  (not loaded)  [CONFIG_KALLSYMS]
+  ...
+  crash> mod -s virtio_net
+       MODULE       NAME                      SIZE  OBJECT FILE
+  ffffffffc027f880  virtio_net               45056  /lib/modules/4.15.0-20-generic/kernel/drivers/net/virtio_net.ko 
+  crash> 
+
+構造体の中身確認::
+
+  crash> struct net_device ffff88d8507fc000
+  struct net_device {
+    name = "ens3\000\000\000\000\000\000\000\000\000\000\000", 
+    name_hlist = {
+      next = 0x0, 
+      pprev = 0xffff88d5e4fd5f88
+    }, 
+    ifalias = 0x0, 
+    mem_end = 0, 
+    mem_start = 0, 
+    base_addr = 0, 
+    irq = 0, 
+    carrier_changes = {
+      counter = 2
+    }, 
+    state = 3, 
+    dev_list = {
+      next = 0xffff88d5df000050, 
+      prev = 0xffff88d5e4802050
+    }, 
+    ...
+    
+メモリリード::
+
+
