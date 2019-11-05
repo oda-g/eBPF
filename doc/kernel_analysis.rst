@@ -215,6 +215,7 @@ crashで動作カーネルを見るとき、/proc/kcoreを参照している。�
 
 ::
 
+  $ sudo readelf -a /proc/kcore
   ELF Header:
     Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
     Class:                             ELF64
