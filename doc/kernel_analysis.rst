@@ -191,20 +191,111 @@ crash使用例
 
 逆アセンブルリスト::
 
-crash> dis ring_buffer_poll_wait
-0xffffffff9576d150 <ring_buffer_poll_wait>:     push   %rbp
-0xffffffff9576d151 <ring_buffer_poll_wait+1>:   cmp    $0xffffffff,%esi
-0xffffffff9576d154 <ring_buffer_poll_wait+4>:   mov    %rsp,%rbp
-0xffffffff9576d157 <ring_buffer_poll_wait+7>:   push   %r13
-0xffffffff9576d159 <ring_buffer_poll_wait+9>:   lea    0x60(%rdi),%r13
-0xffffffff9576d15d <ring_buffer_poll_wait+13>:  push   %r12
-0xffffffff9576d15f <ring_buffer_poll_wait+15>:  push   %rbx
-0xffffffff9576d160 <ring_buffer_poll_wait+16>:  je     0xffffffff9576d185 <ring_buffer_poll_wait+53>
-...
-0xffffffff9576d1b3 <ring_buffer_poll_wait+99>:  lock addl $0x0,-0x4(%rsp)
-...
+  crash> dis ring_buffer_poll_wait
+  0xffffffff9576d150 <ring_buffer_poll_wait>:     push   %rbp
+  0xffffffff9576d151 <ring_buffer_poll_wait+1>:   cmp    $0xffffffff,%esi
+  0xffffffff9576d154 <ring_buffer_poll_wait+4>:   mov    %rsp,%rbp
+  0xffffffff9576d157 <ring_buffer_poll_wait+7>:   push   %r13
+  0xffffffff9576d159 <ring_buffer_poll_wait+9>:   lea    0x60(%rdi),%r13
+  0xffffffff9576d15d <ring_buffer_poll_wait+13>:  push   %r12
+  0xffffffff9576d15f <ring_buffer_poll_wait+15>:  push   %rbx
+  0xffffffff9576d160 <ring_buffer_poll_wait+16>:  je     0xffffffff9576d185 <ring_buffer_poll_wait+53>
+  ...
+  0xffffffff9576d1b3 <ring_buffer_poll_wait+99>:  lock addl $0x0,-0x4(%rsp)
+  ...
 
 (「lock addl $0x0,-0x4(%rsp)」== smp_mb())
+
+おまけ: カーネル内メモリ確認
+-------------------------
+
+crashで動作カーネルを見るとき、/proc/kcoreを参照している。動作カーネルのメモリの内容は、/proc/kcoreを参照しても確認できる。
+
+/proc/kcoreは、ELF形式(core file)になっている。
+
+::
+
+  ELF Header:
+    Magic:   7f 45 4c 46 02 01 01 00 00 00 00 00 00 00 00 00 
+    Class:                             ELF64
+    Data:                              2's complement, little endian
+    Version:                           1 (current)
+    OS/ABI:                            UNIX - System V
+    ABI Version:                       0
+    Type:                              CORE (Core file)
+    Machine:                           Advanced Micro Devices X86-64
+    Version:                           0x1
+    Entry point address:               0x0
+    Start of program headers:          64 (bytes into file)
+    Start of section headers:          0 (bytes into file)
+    Flags:                             0x0
+    Size of this header:               64 (bytes)
+    Size of program headers:           56 (bytes)
+    Number of program headers:         11
+    Size of section headers:           0 (bytes)
+    Number of section headers:         0
+    Section header string table index: 0
+
+  There are no sections in this file.
+
+  There are no sections to group in this file.
+
+  Program Headers:
+    Type           Offset             VirtAddr           PhysAddr
+                   FileSiz            MemSiz              Flags  Align
+    NOTE           0x00000000000002a8 0x0000000000000000 0x0000000000000000
+                   0x0000000000001914 0x0000000000000000         0x0
+    LOAD           0x00007fffff602000 0xffffffffff600000 0xffffffffffffffff
+                   0x0000000000001000 0x0000000000001000  RWE    0x1000
+    LOAD           0x00007fff95602000 0xffffffff95600000 0x0000000440c00000
+                   0x0000000001b69000 0x0000000001b69000  RWE    0x1000
+    LOAD           0x00001fce40002000 0xffff9fce40000000 0xffffffffffffffff
+                   0x00001fffffffffff 0x00001fffffffffff  RWE    0x1000
+    LOAD           0x00007fffc0002000 0xffffffffc0000000 0xffffffffffffffff
+                   0x000000003f000000 0x000000003f000000  RWE    0x1000
+    LOAD           0x000008d340003000 0xffff88d340001000 0x0000000000001000
+                   0x000000000009e000 0x000000000009e000  RWE    0x1000
+    LOAD           0x0000410a40002000 0xffffc10a40000000 0xffffffffffffffff
+                   0x0000000000003000 0x0000000000003000  RWE    0x1000
+    LOAD           0x000008d340102000 0xffff88d340100000 0x0000000000100000
+                   0x00000000bfedf000 0x00000000bfedf000  RWE    0x1000
+    LOAD           0x0000410a40006000 0xffffc10a40004000 0xffffffffffffffff
+                   0x0000000002ffc000 0x0000000002ffc000  RWE    0x1000
+    LOAD           0x000008d440002000 0xffff88d440000000 0x0000000100000000
+                   0x0000000422000000 0x0000000422000000  RWE    0x1000
+    LOAD           0x0000410a44002000 0xffffc10a44000000 0xffffffffffffffff
+                   0x0000000010880000 0x0000000010880000  RWE    0x1000
+
+  There is no dynamic section in this file.
+
+  There are no relocations in this file.
+
+  The decoding of unwind sections for machine type Advanced Micro Devices X86-64 is not currently supported.
+
+  Dynamic symbol information is not available for displaying symbols.
+
+  No version information found in this file.
+
+  Displaying notes found at file offset 0x000002a8 with length 0x00001914:
+    Owner                 Data size	Description
+    CORE                 0x00000150	NT_PRSTATUS (prstatus structure)
+    CORE                 0x00000088	NT_PRPSINFO (prpsinfo structure)
+    CORE                 0x00001700	NT_TASKSTRUCT (task structure)
+
+プログラムセクションを見て、参照したい仮想アドレスがファイルのどのオフセットにあるか調べて、readすればよい。
+
+プログラム例:
+
+それをプログラムにしたのが、src/get_kval/get_kval.c。(指定したアドレスから4バイト読む)
+
+動作確認例:
+
+カーネルのシンボル情報は、/proc/kallsyms を見れば分かる。
+
+::
+
+  $ bash get_sym_val pid_max
+  ffffffff96a59e98: 00008000(32768)
 
 
 
