@@ -19,6 +19,7 @@ crash
 ^^^^^^^^^^
 
 ::
+
   $ sudo apt install crash
   
 debug symbol 取得
@@ -30,11 +31,20 @@ debug symbol 取得
 ::
 
   $ sudo tee /etc/apt/sources.list.d/ddebs.list << EOF
-  > deb http://ddebs.ubuntu.com/ $(lsb_release -cs)          main restricted universe multiverse
-  > deb http://ddebs.ubuntu.com/ $(lsb_release -cs)-updates  main restricted universe multiverse
-  > deb http://ddebs.ubuntu.com/ $(lsb_release -cs)-proposed main restricted universe multiverse
+  > deb http://ddebs.ubuntu.com $(lsb_release -cs) main restricted universe multiverse
+  > deb http://ddebs.ubuntu.com $(lsb_release -cs)-updates main restricted universe multiverse
+  > deb http://ddebs.ubuntu.com $(lsb_release -cs)-proposed main restricted universe multiverse
   > EOF
-  $ sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F2EDC64DC5AEE1F6B9C621F0C8CAB6595FDFF622
-  $ apt update
+  $ sudo apt install ubuntu-dbgsym-keyring
+  $ sudo apt-get update
   $ sudo apt install linux-image-$(uname -r)-dbgsym
 
+/usr/lib/debug/boot/の下にvmlinux-<カーネルバージョン>という名前でファイルがインストールされる。
+
+crash使用例
+^^^^^^^^^^
+
+起動::
+
+  $ sudo crash /usr/lib/debug/boot/vmlinux-4.15.0-20-generic
+  
